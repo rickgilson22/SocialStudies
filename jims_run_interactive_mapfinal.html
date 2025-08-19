@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jim’s Run Home</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root{
+      --blue:#4c7fcf; /* ≤130 km ring */
+      --orange:#ff7a00; /* 130–150 km ring */
+      --amber:#e3a546; /* 150–180 km ring */
+      --ink:#0b1b2b;
+      --muted:#6b7280;
+    }
+    *{box-sizing:border-box}
+    body { margin: 0; font-family: "Open Sans", Arial, sans-serif; color:var(--ink); }
+    /* Fixed banner header */
+    header { position: fixed; top:0; left:0; right:0; padding: 12px 18px; background: white; border-bottom: 1px solid #e8e8ef; z-index: 20; }
+    header h1{margin:0;font-size:1.25rem;font-weight:800;letter-spacing:.2px}
+    header p{margin:4px 0 0 0; color:var(--muted); font-size:.9rem}
+    .wrap { display: grid; grid-template-columns: 360px 1fr; height: 100vh; padding-top: 84px; }
+    #sidebar { background: #fff; border-right: 1px solid #e8e8ef; overflow-y: auto; padding: 16px; }
+    #map { width: 100%; height: calc(100vh - 84px); }
+    .group { margin-bottom: 14px; }
+    label { font-weight: 700; font-size: .9rem; }
+    input[type="text"] { width: 100%; padding: 8px; margin-top: 4px; border:1px solid #d1d5db; border-radius:8px; }
+    button { margin-top: 6px; padding: 8px 12px; border: none; border-radius: 8px; background: #0b6bcb; color: #fff; cursor: pointer; }
+    button.secondary{background:#eef2ff;color:#0b1b2b;border:1px solid #e5e7eb}
+    .checkboxes { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; margin-top: 6px; }
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .item { padding: 6px 8px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 6px; cursor: pointer; }
+    /* Legend */
+    .legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px dashed #e5e7eb;border-radius:10px;padding:8px;margin-top:6px}
+    .swatch{width:14px;height:14px;border-radius:50%;display:inline-block}
+    .sw-blue{background:transparent;border:2px dashed var(--blue)}
+    .sw-orange{background:var(--orange);opacity:.25;border:1px solid var(--orange)}
+    .sw-amber{background:transparent;border:2px dashed var(--amber)}
+    .hint{font-size:.86rem;color:var(--muted);line-height:1.35;margin-top:4px}
+    /* Book cover card */
+    .book { display:flex; gap:10px; align-items:flex-start; border:1px solid #e8e8ef; border-radius:12px; padding:10px; }
+    .book img{ width:86px; height:auto; border-radius:8px; object-fit:cover; }
+    .book small{ color:var(--muted); }
+    /* Toggles */
+    .toggle{display:flex;gap:6px;align-items:center;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Jim’s Run Home</h1>
+    <p>Adapted from <em>Valley of the Birdtail: An Indian Reserve, a White Town, and the Road to Reconciliation</em> by Andrew Stobo Sniderman &amp; Douglas Sanderson (Amo Binashii).</p>
+  </header>
+
+  <div class="wrap">
+    <aside id="sidebar">
+      <div class="group">
+        <label for="place">Student town or city</label>
+        <input id="place" type="text" placeholder="e.g., Lethbridge, AB" />
+        <div class="row">
+          <button id="go">Find &amp; draw 150 km</button>
+          <button id="loc" class="secondary">Use my location</button>
+          <button id="clear" class="secondary">Clear</button>
+        </div>
+        <div class="hint">Hint: Click anywhere on the map to set a starting point. Click a coloured distance ring or the toggles below to show/hide it.</div>
+      </div>
+
+      <div class="group">
+        <label>Distance bands</label>
+        <div class="checkboxes" id="bands">
+          <label class="toggle"><input type="checkbox" class="drange" value="le130" checked> ≤130 km</label>
+          <label class="toggle"><input type="checkbox" class="drange" value="130-150" checked> 130–150 km</label>
+          <label class="toggle"><input type="checkbox" class="drange" value="150-180" checked> 150–180 km</label>
+        </div>
+        <div class="legend">
+          <span class="swatch sw-blue"></span> ≤130 km
+          <span class="swatch sw-orange"></span> 130–150 km
+          <span class="swatch sw-amber"></span> 150–180 km
+        </div>
+      </div>
+
+      <div class="group">
+        <label>Show place types</label>
+        <div class="checkboxes">
+          <label><input type="checkbox" class="ptype" value="hamlet" checked> Hamlet</label>
+          <label><input type="checkbox" class="ptype" value="village" checked> Village</label>
+          <label><input type="checkbox" class="ptype" value="town" checked> Town</label>
+          <label><input type="checkbox" class="ptype" value="city" checked> City</label>
+        </div>
+      </div>
+
+      <div class="group book">
+        <!-- If you host this HTML, place the book cover in the same folder and keep the filename below, or update the src to your hosted URL. -->
+        <img src="book-cover-valley-of-the-birdtail.jpeg" alt="Valley of the Birdtail book cover" />
+        <div>
+          <strong>About the source</strong><br/>
+          <small>“Jim’s Run” scenario is inspired by events described in <em>Valley of the Birdtail</em>. Use this tool to visualize a 150 km journey from your own community.</small>
+        </div>
+      </div>
+
+      <div id="status" class="group">Choose a location to begin.</div>
+      <div id="places"></div>
+    </aside>
+    <main id="map"></main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    const map = L.map('map').setView([54.5, -114.5], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    let homeMarker, ring130, ring150, ring180;
+    let townLayer = L.layerGroup().addTo(map);
+    const KM = 1000;
+    const statusEl = document.getElementById('status');
+    const listEl = document.getElementById('places');
+
+    function setStatus(msg) { statusEl.innerHTML = msg; }
+    function fmtKm(m) { return (m/1000).toFixed(1) + ' km'; }
+
+    const bandChecks = () => Array.from(document.querySelectorAll('.drange:checked')).map(cb=>cb.value);
+    const typeChecks = () => Array.from(document.querySelectorAll('.ptype:checked')).map(cb=>cb.value);
+
+    function withinSelectedBands(d){
+      const sel = new Set(bandChecks());
+      if (sel.has('le130') && d <= 130*KM) return true;
+      if (sel.has('130-150') && d > 130*KM && d <= 150*KM) return true;
+      if (sel.has('150-180') && d > 150*KM && d <= 180*KM) return true;
+      return false;
+    }
+
+    function styleRings(){
+      const sel = new Set(bandChecks());
+      if(ring130){ ring130.setStyle({opacity: sel.has('le130')?1:0.15}); }
+      if(ring150){ ring150.setStyle({opacity: sel.has('130-150')?1:0.15, fillOpacity: sel.has('130-150')?0.08:0}); }
+      if(ring180){ ring180.setStyle({opacity: sel.has('150-180')?1:0.15}); }
+    }
+
+    function attachRingClicks(){
+      if(ring130) ring130.on('click',()=>{toggleBand('le130')});
+      if(ring150) ring150.on('click',()=>{toggleBand('130-150')});
+      if(ring180) ring180.on('click',()=>{toggleBand('150-180')});
+    }
+    function toggleBand(val){
+      const cb = document.querySelector(`.drange[value="${val}"]`);
+      if(!cb) return; cb.checked = !cb.checked; styleRings(); if(homeMarker){const {lat,lng}=homeMarker.getLatLng(); fetchNearby(lat,lng);} }
+
+    function drawRings(lat, lon) {
+      [ring130, ring150, ring180].forEach(r => r && map.removeLayer(r));
+      ring130 = L.circle([lat, lon], { radius: 130*KM, color: getComputedStyle(document.documentElement).getPropertyValue('--blue').trim(), dashArray: '6 6', fillOpacity:0, weight:2 }).addTo(map);
+      ring150 = L.circle([lat, lon], { radius: 150*KM, color: getComputedStyle(document.documentElement).getPropertyValue('--orange').trim(), fillOpacity:0.08, weight:2 }).addTo(map);
+      ring180 = L.circle([lat, lon], { radius: 180*KM, color: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(), dashArray: '6 6', fillOpacity:0, weight:2 }).addTo(map);
+      map.fitBounds(ring180.getBounds(), { padding: [30,30] });
+      styleRings();
+      attachRingClicks();
+    }
+
+    function setHome(lat, lon, label="Home") {
+      if (homeMarker) map.removeLayer(homeMarker);
+      homeMarker = L.marker([lat, lon]).addTo(map).bindPopup(`<b>${label}</b>`).openPopup();
+      drawRings(lat, lon);
+      fetchNearby(lat, lon);
+      setStatus(`Home set at <b>${label}</b>`);
+    }
+
+    async function geocode(q) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.length) throw new Error('Place not found');
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), display: data[0].display_name };
+    }
+
+    async function fetchNearby(lat, lon) {
+      listEl.innerHTML = '';
+      townLayer.clearLayers();
+      // Search out to 180 km
+      const q = `
+[out:json];(node["place"~"city|town|village|hamlet"](around:180000,${lat},${lon}););out body;`;
+      try {
+        const res = await fetch('https://overpass-api.de/api/interpreter', { method:'POST', body:`data=${encodeURIComponent(q)}` });
+        const data = await res.json();
+        const allowedTypes = new Set(typeChecks());
+        const results = [];
+        for (const el of data.elements) {
+          const d = map.distance([lat, lon],[el.lat,el.lon]);
+          const inBands = withinSelectedBands(d);
+          if (inBands && allowedTypes.has(el.tags.place)) {
+            const name = el.tags.name || 'Unnamed';
+            results.push({name, dist:d, lat:el.lat, lon:el.lon, type:el.tags.place});
+          }
+        }
+        results.sort((a,b)=>a.dist-b.dist);
+        for (const r of results) {
+          const m = L.circleMarker([r.lat,r.lon],{radius:6,color:'#0b6bcb'}).addTo(townLayer).bindPopup(`<b>${r.name}</b><br>${fmtKm(r.dist)} (${r.type})`);
+          const div=document.createElement('div');
+          div.className='item';
+          div.innerHTML=`<strong>${r.name}</strong> ${fmtKm(r.dist)} · ${r.type}`;
+          div.onclick=()=>{m.openPopup();map.panTo([r.lat,r.lon]);};
+          listEl.appendChild(div);
+        }
+        setStatus(`Found ${results.length} communities (filtered).`);
+      } catch(err) { setStatus('Error fetching data'); }
+    }
+
+    document.getElementById('go').onclick=async()=>{
+      const q=document.getElementById('place').value.trim();
+      if(!q) return setStatus('Enter a place');
+      setStatus('Searching...');
+      try{const {lat,lon,display}=await geocode(q);setHome(lat,lon,display);}catch(e){setStatus(e.message);} };
+
+    document.getElementById('loc').onclick=()=>{
+      if(navigator.geolocation){navigator.geolocation.getCurrentPosition(pos=>{setHome(pos.coords.latitude,pos.coords.longitude,'My location');});}
+    };
+
+    document.getElementById('clear').onclick=()=>{
+      [homeMarker,ring130,ring150,ring180].forEach(r=>r&&map.removeLayer(r));
+      townLayer.clearLayers();
+      listEl.innerHTML='';
+      setStatus('Cleared');
+      map.setView([54.5,-114.5],5);
+    };
+
+    document.querySelectorAll('.ptype').forEach(cb=>cb.addEventListener('change',()=>{if(homeMarker){const {lat,lng}=homeMarker.getLatLng();fetchNearby(lat,lng);}}));
+    document.querySelectorAll('.drange').forEach(cb=>cb.addEventListener('change',()=>{styleRings(); if(homeMarker){const {lat,lng}=homeMarker.getLatLng(); fetchNearby(lat,lng);}}));
+
+    map.on('click',e=>setHome(e.latlng.lat,e.latlng.lng,'Map click'));
+  </script>
+</body>
+</html>
